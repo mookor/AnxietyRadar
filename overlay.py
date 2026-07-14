@@ -46,7 +46,7 @@ class OverlayIndicator:
         self.root.configure(bg="white")
 
         size = CIRCLE_SIZE + PADDING * 2
-        self.root.geometry(f"{size}x{size}+50+50")
+        self.root.geometry(f"{size}x{size}+4350+25")
 
         self.canvas = tk.Canvas(
             self.root,

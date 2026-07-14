@@ -214,6 +214,39 @@ pip install -r requirements.txt
 python overlay.py
 ```
 
+### Сборка .exe и автозапуск
+
+Один раз собрать исполняемый файл:
+
+```powershell
+.\scripts\build_overlay.ps1
+```
+
+Результат: `dist\AnxietyRadarOverlay.exe`
+
+Положите `.env` **в папку `dist\`** рядом с exe (скопируйте из `.env.example` или с ПК-клиента). Exe читает конфиг из своей папки, не из репозитория.
+
+Проверка:
+
+```powershell
+cd dist
+.\AnxietyRadarOverlay.exe
+```
+
+Добавить в автозапуск Windows:
+
+```powershell
+.\scripts\install_autostart.ps1
+```
+
+Скрипт создаёт ярлык в папке автозагрузки (`Win+R` → `shell:startup`). Убрать из автозапуска — удалить ярлык `AnxietyRadarOverlay.lnk` оттуда же.
+
+Пересборка после изменений в `overlay.py`:
+
+```powershell
+.\scripts\build_overlay.ps1
+```
+
 Проверка доступности API с клиента:
 
 ```powershell

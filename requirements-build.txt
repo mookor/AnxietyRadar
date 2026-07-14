@@ -1,0 +1,5 @@
+# Сборка overlay в .exe (Windows)
+# Запуск из корня репозитория:
+#   .\scripts\build_overlay.ps1
+
+pyinstaller>=6.0
