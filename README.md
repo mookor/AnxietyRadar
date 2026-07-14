@@ -247,6 +247,8 @@ cd dist
 .\scripts\build_overlay.ps1
 ```
 
+Если exe внезапно закрывается — смотрите лог `dist\overlay.log` (ошибки API, JSON, сеть).
+
 Проверка доступности API с клиента:
 
 ```powershell
