@@ -1,0 +1,21 @@
+[Unit]
+Description=AnxietyRadar Planes API and Finder
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=@SERVICE_USER@
+Group=@SERVICE_GROUP@
+WorkingDirectory=@REPO_ROOT@
+EnvironmentFile=@REPO_ROOT@/.env
+ExecStart=@REPO_ROOT@/venv/bin/python python/planes/find_planes.py
+Restart=always
+RestartSec=5
+
+# Логи: journalctl -u anxietyradar-planes -f
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

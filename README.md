@@ -11,7 +11,11 @@
 ```
 AnxietyRadar/
 ├── config.py              # загрузка настроек из .env
-├── .env.example           # шаблон конфигурации
+├── .env.example           # шаблон конфигурации (сервер)
+├── .env.client.example    # шаблон .env для клиента (overlay на другом ПК)
+├── deploy/
+│   ├── anxietyradar-planes.service.in  # шаблон unit для systemd
+│   └── install-service.sh              # установка сервиса + UFW
 ├── overlay.py             # индикатор-кружок поверх всех окон
 ├── test_api.py            # простой скрипт для проверки API
 ├── requirements.txt
@@ -38,7 +42,7 @@ copy .env.example .env
 | Переменная | Описание | По умолчанию |
 |------------|----------|--------------|
 | `API_BIND_HOST` | Интерфейс сервера (`0.0.0.0` = доступен в LAN) | `0.0.0.0` |
-| `API_PORT` | Порт HTTP API | `8000` |
+| `API_PORT` | Порт HTTP API | `8001` |
 | `API_CLIENT_HOST` | Хост для клиентов (overlay, тесты) | `localhost` |
 | `BOUNDS_LAT1`, `BOUNDS_LON1` | Верхний левый угол зоны поиска | Новосибирск |
 | `BOUNDS_LAT2`, `BOUNDS_LON2` | Нижний правый угол зоны поиска | Новосибирск |
@@ -59,7 +63,7 @@ copy .env.example .env
 .\venv\Scripts\python.exe python\planes\find_planes.py
 ```
 
-В консоли появится зона поиска. API доступен на `http://localhost:8000`.
+В консоли появится зона поиска. API доступен на `http://localhost:8001` (на VPS по умолчанию `8001`, т.к. `8000` часто занят).
 
 ### 2. Overlay-индикатор
 
@@ -85,10 +89,10 @@ copy .env.example .env
 ```
 
 Или в браузере:
-- `http://localhost:8000/planes` — все самолёты
-- `http://localhost:8000/planes/count` — `{"count": N}`
-- `http://localhost:8000/health` — `{"ok": true}`
-- `http://localhost:8000/docs` — Swagger UI
+- `http://localhost:8001/planes` — все самолёты
+- `http://localhost:8001/planes/count` — `{"count": N}`
+- `http://localhost:8001/health` — `{"ok": true}`
+- `http://localhost:8001/docs` — Swagger UI
 
 ## API
 
@@ -121,7 +125,131 @@ copy .env.example .env
 
 ## Сеть и брандмауэр
 
-Сервер слушает `API_BIND_HOST:API_PORT` (по умолчанию `0.0.0.0:8000`). Если с телефона или другого устройства API не открывается — разрешите порт 8000 в брандмауэре Windows.
+Сервер слушает `API_BIND_HOST:API_PORT` (по умолчанию `0.0.0.0:8001` на VPS).
+
+### Windows (локальный сервер)
+
+Если с телефона или другого устройства API не открывается — разрешите порт 8000 в брандмауэре Windows.
+
+### Linux-сервер (systemd + UFW)
+
+На удалённом VPS сервис можно держать постоянно через systemd и открыть API только для вашего IP.
+
+> **Важно:** если порт `8000` уже занят другим сервисом, используйте `8001` в `.env`.
+> Проверяйте, что отвечает именно AnxietyRadar: `/health` должен вернуть `{"ok":true}`.
+
+**1. Подготовка на сервере**
+
+```bash
+cd ~/AnxietyRadar
+python3 -m venv venv
+./venv/bin/pip install -r requirements.txt
+cp .env.example .env
+# отредактируйте .env: зона поиска, API_BIND_HOST=0.0.0.0
+```
+
+**2. Установка systemd-сервиса и firewall**
+
+```bash
+sudo ./deploy/install-service.sh YOUR_CLIENT_IP
+```
+
+`YOUR_CLIENT_IP` — ваш внешний IP (узнать: `curl -4 ifconfig.me`). Скрипт:
+- генерирует unit из `deploy/anxietyradar-planes.service.in` с путями текущего репозитория
+- включает автозапуск и перезапуск при падении (`Restart=always`)
+- добавляет правило UFW: TCP `API_PORT` из `.env` (по умолчанию `8001`) только с указанного IP
+
+Ручная установка (без скрипта):
+
+```bash
+sudo ./deploy/install-service.sh
+sudo ufw allow from YOUR_CLIENT_IP to any port 8001 proto tcp comment 'AnxietyRadar client'
+```
+
+**3. Управление сервисом**
+
+```bash
+sudo systemctl status anxietyradar-planes   # статус
+sudo systemctl restart anxietyradar-planes  # перезапуск
+sudo journalctl -u anxietyradar-planes -f   # логи в реальном времени
+```
+
+**4. Проверка с сервера**
+
+```bash
+curl http://127.0.0.1:8001/health
+curl http://127.0.0.1:8001/planes/count
+```
+
+### Клиент на основном ПК (overlay / tkinter)
+
+На компьютере, откуда запускаете `overlay.py`, нужен свой `.env` — сервер только отдаёт API, зона поиска настраивается на VPS.
+
+```powershell
+copy .env.client.example .env
+```
+
+Минимально важные поля:
+
+| Переменная | Значение | Зачем |
+|------------|----------|-------|
+| `API_CLIENT_HOST` | публичный IP или домен сервера | куда ходит overlay |
+| `API_PORT` | `8001` | порт API на сервере |
+| `OVERLAY_POLL_INTERVAL_MS` | `1500` | частота опроса кружка |
+
+Пример `.env` на клиенте:
+
+```env
+API_CLIENT_HOST=your-server.example.com
+API_PORT=8001
+API_BIND_HOST=127.0.0.1
+OVERLAY_POLL_INTERVAL_MS=1500
+```
+
+Запуск overlay на Windows:
+
+```powershell
+.\venv\Scripts\activate
+pip install -r requirements.txt
+python overlay.py
+```
+
+Проверка доступности API с клиента:
+
+```powershell
+curl http://your-server.example.com:8001/health
+python test_api.py
+```
+
+Если кружок серый — API недоступен: проверьте IP в `.env`, что сервис на VPS запущен (`systemctl status anxietyradar-planes`) и что ваш текущий внешний IP совпадает с разрешённым в UFW.
+
+## Безопасность и публикация в Git
+
+**Никогда не коммитьте:**
+
+| Файл | Почему |
+|------|--------|
+| `.env` | реальные IP, зона поиска, порты |
+| `venv/`, `.venv/` | локальное окружение |
+| `*.log`, `__pycache__/` | артефакты запуска |
+
+В репозитории только шаблоны: `.env.example`, `.env.client.example`. После клонирования:
+
+```bash
+cp .env.example .env          # на сервере
+cp .env.client.example .env   # на клиенте (overlay)
+```
+
+Перед `git push` проверьте:
+
+```bash
+git status
+git diff --staged
+```
+
+Убедитесь, что в diff нет `.env`, реальных IP и персональных путей. Systemd unit генерируется на сервере скриптом `install-service.sh` — в git только шаблон `.service.in`.
+
+Если случайно закоммитили секрет — смените IP в UFW и пересоздайте `.env`; для удаления из истории git используйте `git filter-repo` или BFG (простой `git rm` не убирает из старых коммитов).
 
 ## Зависимости
 
